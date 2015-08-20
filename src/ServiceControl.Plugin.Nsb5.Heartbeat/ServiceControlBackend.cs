@@ -16,16 +16,13 @@
     class ServiceControlBackend
     {
         Configure configure;
-        CriticalError criticalError;
         public  ServiceControlBackend(ISendMessages messageSender, Configure configure, CriticalError criticalError)
         {
             this.configure = configure;
-            this.criticalError = criticalError;
             this.messageSender = messageSender;
             serializer = new JsonMessageSerializer(new SimpleMessageMapper());
 
             serviceControlBackendAddress = GetServiceControlAddress();
-            VerifyIfServiceControlQueueExists();
 
             circuitBreaker =
             new RepeatedFailuresOverTimeCircuitBreaker("ServiceControlConnectivity", GetCircuitBreakerTimeout(),
@@ -76,6 +73,26 @@
         public void Send(object messageToSend)
         {
             Send(messageToSend, TimeSpan.MaxValue);
+        }
+
+        public void VerifyIfServiceControlQueueExists()
+        {
+            try
+            {
+                // In order to verify if the queue exists, we are sending a control message to SC. 
+                // If we are unable to send a message because the queue doesn't exist, then we can fail fast.
+                // We currently don't have a way to check if Queue exists in a transport agnostic way, 
+                // hence the send.
+                messageSender.Send(ControlMessage.Create(), new SendOptions(serviceControlBackendAddress) { ReplyToAddress = configure.LocalAddress });
+            }
+            catch (Exception ex)
+            {
+                var errMsg = string.Format("This endpoint is unable to contact the ServiceControl Backend to report endpoint information. You have the ServiceControl plugins installed in your endpoint. However, please ensure that the Particular ServiceControl service is installed on this machine, " +
+                                      "or if running ServiceControl on a different machine, then ensure that your endpoint's app.config / web.config, AppSettings has the following key set appropriately: ServiceControl/Queue. \r\n" +
+                                      @"For example: <add key=""ServiceControl/Queue"" value=""particular.servicecontrol@machine""/>" +
+                                      "\r\n Additional details: {0}", ex);
+                throw new InvalidOperationException(errMsg, ex);
+            }
         }
 
         Address GetServiceControlAddress()
@@ -131,25 +148,6 @@
             return false;
         }
 
-        void VerifyIfServiceControlQueueExists()
-        {
-            try
-            {
-                // In order to verify if the queue exists, we are sending a control message to SC. 
-                // If we are unable to send a message because the queue doesn't exist, then we can fail fast.
-                // We currently don't have a way to check if Queue exists in a transport agnostic way, 
-                // hence the send.
-                messageSender.Send(ControlMessage.Create(), new SendOptions(serviceControlBackendAddress) { ReplyToAddress = configure.LocalAddress });
-            }
-            catch (Exception ex)
-            {
-                const string errMsg = "This endpoint is unable to contact the ServiceControl Backend to report endpoint information. You have the ServiceControl plugins installed in your endpoint. However, please ensure that the Particular ServiceControl service is installed on this machine, " +
-                                      "or if running ServiceControl on a different machine, then ensure that your endpoint's app.config / web.config, AppSettings has the following key set appropriately: ServiceControl/Queue. \r\n" +
-                                      @"For example: <add key=""ServiceControl/Queue"" value=""particular.servicecontrol@machine""/>" +
-                                      "\r\n Additional details: {0}";
-                criticalError.Raise(errMsg, ex);
-            }
-        }
 
         TimeSpan GetCircuitBreakerTimeout()
         {
