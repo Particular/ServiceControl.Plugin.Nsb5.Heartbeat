@@ -153,7 +153,7 @@
 
         TimeSpan GetCircuitBreakerTimeout()
         {
-            var circuitBreakerTimeoutSeconds = ConfigurationManager.AppSettings[@"ServiceControl/Heartbeat/CircuitBreakerTimeoutSeconds"];
+            var circuitBreakerTimeoutSeconds = ConfigurationManager.AppSettings[@"Heartbeat/CircuitBreakerTimeoutSeconds"];
             if (!string.IsNullOrEmpty(circuitBreakerTimeoutSeconds))
             {
                 int timeout;
