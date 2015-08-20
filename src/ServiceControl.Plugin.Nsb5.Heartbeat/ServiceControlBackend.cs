@@ -28,7 +28,7 @@
             VerifyIfServiceControlQueueExists();
 
             circuitBreaker =
-            new RepeatedFailuresOverTimeCircuitBreaker("ServiceControlConnectivity", TimeSpan.FromMinutes(2),
+            new RepeatedFailuresOverTimeCircuitBreaker("ServiceControlConnectivity", GetCircuitBreakerTimeout(),
                 ex =>
                     criticalError.Raise(
                         "This endpoint is repeatedly unable to contact the ServiceControl backend to report endpoint information. You have the ServiceControl plugins installed in your endpoint. However, please ensure that the Particular ServiceControl service is installed on this machine, " +
@@ -149,6 +149,19 @@
                                       "\r\n Additional details: {0}";
                 criticalError.Raise(errMsg, ex);
             }
+        }
+
+        TimeSpan GetCircuitBreakerTimeout()
+        {
+            var circuitBreakerTimeoutSeconds = ConfigurationManager.AppSettings[@"ServiceControl/Heartbeat/CircuitBreakerTimeoutSeconds"];
+            if (!string.IsNullOrEmpty(circuitBreakerTimeoutSeconds))
+            {
+                int timeout;
+                if (int.TryParse(circuitBreakerTimeoutSeconds, out timeout) && timeout > 0)
+                    return TimeSpan.FromSeconds(timeout);
+            }
+
+            return TimeSpan.FromMinutes(2);
         }
 
         JsonMessageSerializer serializer;
