@@ -33,7 +33,6 @@
             }
             
             backend = new ServiceControlBackend(SendMessages, Configure);
-            backend.VerifyIfServiceControlQueueExists();
             heartbeatInterval = TimeSpan.FromSeconds(10); // Default interval
             var interval = ConfigurationManager.AppSettings[@"Heartbeat/Interval"];
             
@@ -87,7 +86,15 @@
                 Host = hostInfo.DisplayName,
                 HostId = hostInfo.HostId
             };
-            backend.Send(heartBeat, ttlTimeSpan);
+
+            try
+            {
+                backend.Send(heartBeat, ttlTimeSpan);
+            }
+            catch (Exception ex)
+            {
+                logger.Warn("Unable to send heartbeat to ServiceControl:", ex);
+            }
         }
 
         ServiceControlBackend backend;

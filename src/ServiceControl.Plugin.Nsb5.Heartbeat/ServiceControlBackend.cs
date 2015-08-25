@@ -6,12 +6,10 @@
     using System.Text;
     using NServiceBus;
     using NServiceBus.Config;
-    using NServiceBus.Logging;
     using NServiceBus.Serializers.Binary;
     using NServiceBus.Serializers.Json;
     using NServiceBus.Transports;
     using NServiceBus.Unicast;
-    using NServiceBus.Unicast.Transport;
 
     class ServiceControlBackend
     {
@@ -50,39 +48,12 @@
             message.Headers[Headers.EnclosedMessageTypes] = messageToSend.GetType().FullName;
             message.Headers[Headers.ContentType] = ContentTypes.Json; //Needed for ActiveMQ transport
 
-            try
-            {
-                messageSender.Send(message, new SendOptions(serviceControlBackendAddress) { ReplyToAddress = configure.LocalAddress });
-            }
-            catch (Exception ex)
-            {
-                logger.Warn(string.Format("Unable to send message to '{0}':", serviceControlBackendAddress), ex);
-            }            
+            messageSender.Send(message, new SendOptions(serviceControlBackendAddress) { ReplyToAddress = configure.LocalAddress });
         }
 
         public void Send(object messageToSend)
         {
             Send(messageToSend, TimeSpan.MaxValue);
-        }
-
-        public void VerifyIfServiceControlQueueExists()
-        {
-            try
-            {
-                // In order to verify if the queue exists, we are sending a control message to SC. 
-                // If we are unable to send a message because the queue doesn't exist, then we can fail fast.
-                // We currently don't have a way to check if Queue exists in a transport agnostic way, 
-                // hence the send.
-                messageSender.Send(ControlMessage.Create(), new SendOptions(serviceControlBackendAddress) { ReplyToAddress = configure.LocalAddress });
-            }
-            catch (Exception ex)
-            {
-                var errMsg = string.Format("This endpoint is unable to contact the ServiceControl Backend to report endpoint information. You have the ServiceControl plugins installed in your endpoint. However, please ensure that the Particular ServiceControl service is installed on this machine, " +
-                                      "or if running ServiceControl on a different machine, then ensure that your endpoint's app.config / web.config, AppSettings has the following key set appropriately: ServiceControl/Queue. \r\n" +
-                                      @"For example: <add key=""ServiceControl/Queue"" value=""particular.servicecontrol@machine""/>" +
-                                      "\r\n Additional details: {0}", ex);
-                throw new InvalidOperationException(errMsg, ex);
-            }
         }
 
         Address GetServiceControlAddress()
@@ -112,7 +83,6 @@
             return null;
         }
 
-
         bool TryGetErrorQueueAddress(out Address address)
         {
             var faultsForwarderConfig = configure.Settings.GetConfigSection<MessageForwardingInCaseOfFaultConfig>();
@@ -137,8 +107,6 @@
 
             return false;
         }
-
-        static ILog logger = LogManager.GetLogger(typeof(ServiceControlBackend));
 
         JsonMessageSerializer serializer;
         ISendMessages messageSender;
