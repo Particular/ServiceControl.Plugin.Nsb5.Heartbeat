@@ -6,32 +6,23 @@
     using System.Text;
     using NServiceBus;
     using NServiceBus.Config;
+    using NServiceBus.Logging;
     using NServiceBus.Serializers.Binary;
     using NServiceBus.Serializers.Json;
     using NServiceBus.Transports;
     using NServiceBus.Unicast;
     using NServiceBus.Unicast.Transport;
-    using NServiceBus.CircuitBreakers;
 
     class ServiceControlBackend
     {
         Configure configure;
-        public  ServiceControlBackend(ISendMessages messageSender, Configure configure, CriticalError criticalError)
+        public  ServiceControlBackend(ISendMessages messageSender, Configure configure)
         {
             this.configure = configure;
             this.messageSender = messageSender;
             serializer = new JsonMessageSerializer(new SimpleMessageMapper());
 
             serviceControlBackendAddress = GetServiceControlAddress();
-
-            circuitBreaker =
-            new RepeatedFailuresOverTimeCircuitBreaker("ServiceControlConnectivity", GetCircuitBreakerTimeout(),
-                ex =>
-                    criticalError.Raise(
-                        "This endpoint is repeatedly unable to contact the ServiceControl backend to report endpoint information. You have the ServiceControl plugins installed in your endpoint. However, please ensure that the Particular ServiceControl service is installed on this machine, " +
-                                   "or if running ServiceControl on a different machine, then ensure that your endpoint's app.config / web.config, AppSettings has the following key set appropriately: ServiceControl/Queue. \r\n" +
-                                   @"For example: <add key=""ServiceControl/Queue"" value=""particular.servicecontrol@machine""/>" +
-                                   "\r\n", ex));
         }
 
         public void Send(object messageToSend, TimeSpan timeToBeReceived)
@@ -62,11 +53,10 @@
             try
             {
                 messageSender.Send(message, new SendOptions(serviceControlBackendAddress) { ReplyToAddress = configure.LocalAddress });
-                circuitBreaker.Success();
             }
             catch (Exception ex)
             {
-                circuitBreaker.Failure(ex);
+                logger.Warn(string.Format("Unable to send message to '{0}':", serviceControlBackendAddress), ex);
             }            
         }
 
@@ -148,23 +138,10 @@
             return false;
         }
 
-
-        TimeSpan GetCircuitBreakerTimeout()
-        {
-            var circuitBreakerTimeoutSeconds = ConfigurationManager.AppSettings[@"Heartbeat/CircuitBreakerTimeoutSeconds"];
-            if (!string.IsNullOrEmpty(circuitBreakerTimeoutSeconds))
-            {
-                int timeout;
-                if (int.TryParse(circuitBreakerTimeoutSeconds, out timeout) && timeout > 0)
-                    return TimeSpan.FromSeconds(timeout);
-            }
-
-            return TimeSpan.FromMinutes(2);
-        }
+        static ILog logger = LogManager.GetLogger(typeof(ServiceControlBackend));
 
         JsonMessageSerializer serializer;
         ISendMessages messageSender;
         Address serviceControlBackendAddress;
-        RepeatedFailuresOverTimeCircuitBreaker circuitBreaker;
     }
 }

@@ -16,10 +16,7 @@
     {
         public ISendMessages SendMessages { get; set; }
         public Configure Configure { get; set; }
-
         public UnicastBus UnicastBus { get; set; }
-
-        public CriticalError CriticalError { get; set; }
 
         static ILog logger = LogManager.GetLogger(typeof(Heartbeats));
         
@@ -35,7 +32,7 @@
                 return;
             }
             
-            backend = new ServiceControlBackend(SendMessages, Configure, CriticalError);
+            backend = new ServiceControlBackend(SendMessages, Configure);
             backend.VerifyIfServiceControlQueueExists();
             heartbeatInterval = TimeSpan.FromSeconds(10); // Default interval
             var interval = ConfigurationManager.AppSettings[@"Heartbeat/Interval"];
