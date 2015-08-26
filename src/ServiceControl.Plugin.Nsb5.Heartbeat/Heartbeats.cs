@@ -3,6 +3,7 @@
     using System;
     using System.Configuration;
     using System.Threading;
+    using System.Threading.Tasks;
     using NServiceBus;
     using NServiceBus.Config;
     using NServiceBus.Features;
@@ -58,23 +59,37 @@
             
             var hostInfo = UnicastBus.HostInformation;
 
-            SendStartupMessageToBackend(hostInfo);
-
-            heartbeatTimer = new Timer(x => ExecuteHeartbeat(hostInfo), null, TimeSpan.Zero, heartbeatInterval);
+            NotifyEndpointStartup(hostInfo, DateTime.UtcNow);
+            StartHeartbeats(hostInfo);
         }
 
-        void SendStartupMessageToBackend(HostInformation hostInfo)
+        void NotifyEndpointStartup(HostInformation hostInfo, DateTime startupTime)
         {
-            backend.Send(
-                new RegisterEndpointStartup
-                {
-                    HostId = hostInfo.HostId,
-                    Host = hostInfo.DisplayName,
-                    Endpoint = Configure.Settings.EndpointName(),
-                    HostDisplayName = hostInfo.DisplayName,
-                    HostProperties = hostInfo.Properties,
-                    StartedAt = DateTime.UtcNow
-                }, ttlTimeSpan);
+            try
+            {
+                backend.Send(
+                    new RegisterEndpointStartup
+                    {
+                        HostId = hostInfo.HostId,
+                        Host = hostInfo.DisplayName,
+                        Endpoint = Configure.Settings.EndpointName(),
+                        HostDisplayName = hostInfo.DisplayName,
+                        HostProperties = hostInfo.Properties,
+                        StartedAt = startupTime
+                    }, ttlTimeSpan);
+            }
+            catch (Exception ex)
+            {
+                logger.Warn(string.Format("Unable to register endpoint startup with ServiceControl. Going to reattempt registration after {0}.", registrationRetryInterval), ex);
+
+                Task.Delay(registrationRetryInterval).ContinueWith(t => NotifyEndpointStartup(hostInfo, startupTime));
+            }
+        }
+
+        void StartHeartbeats(HostInformation hostInfo)
+        {
+            logger.DebugFormat("Start sending heartbeats every {0}", heartbeatInterval);
+            heartbeatTimer = new Timer(x => ExecuteHeartbeat(hostInfo), null, TimeSpan.Zero, heartbeatInterval);
         }
 
         void ExecuteHeartbeat(HostInformation hostInfo)
@@ -102,6 +117,7 @@
         Timer heartbeatTimer;
         TimeSpan heartbeatInterval;
         TimeSpan ttlTimeSpan;
+        TimeSpan registrationRetryInterval = TimeSpan.FromMinutes(1);
 
         protected override void Setup(FeatureConfigurationContext context)
         {
