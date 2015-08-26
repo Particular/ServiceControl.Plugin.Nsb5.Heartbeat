@@ -35,14 +35,10 @@
         {
             public HeartbeatStartup(ISendMessages sendMessages, Configure configure, UnicastBus unicastBus)
             {
-                this.sendMessages = sendMessages;
-                this.configure = configure;
                 this.unicastBus = unicastBus;
-            }
 
-            protected override void OnStart()
-            {
                 backend = new ServiceControlBackend(sendMessages, configure);
+                endpointName = configure.Settings.EndpointName();
 
                 var interval = ConfigurationManager.AppSettings[@"Heartbeat/Interval"];
                 if (!String.IsNullOrEmpty(interval))
@@ -64,11 +60,14 @@
                         Logger.Warn("Invalid Heartbeat/TTL specified in AppSettings. Reverted to default TTL (4 x Heartbeat/Interval)");
                     }
                 }
+            }
 
-                var hostInfo = unicastBus.HostInformation;
+            protected override void OnStart()
+            {
+                cancellationTokenSource = new CancellationTokenSource();
 
-                NotifyEndpointStartup(hostInfo, DateTime.UtcNow);
-                StartHeartbeats(hostInfo);
+                NotifyEndpointStartup(unicastBus.HostInformation, DateTime.UtcNow);
+                StartHeartbeats(unicastBus.HostInformation);
             }
 
             protected override void OnStop()
@@ -78,7 +77,10 @@
                     heartbeatTimer.Dispose();
                 }
 
-                cancellationTokenSource.Cancel();
+                if (cancellationTokenSource != null)
+                {
+                    cancellationTokenSource.Cancel();
+                }
 
                 base.OnStop();
             }
@@ -104,7 +106,7 @@
                         {
                             HostId = hostInfo.HostId,
                             Host = hostInfo.DisplayName,
-                            Endpoint = configure.Settings.EndpointName(),
+                            Endpoint = endpointName,
                             HostDisplayName = hostInfo.DisplayName,
                             HostProperties = hostInfo.Properties,
                             StartedAt = startupTime
@@ -124,7 +126,7 @@
                 var heartBeat = new EndpointHeartbeat
                 {
                     ExecutedAt = DateTime.UtcNow,
-                    EndpointName = configure.Settings.EndpointName(),
+                    EndpointName = endpointName,
                     Host = hostInfo.DisplayName,
                     HostId = hostInfo.HostId
                 };
@@ -143,7 +145,10 @@
             {
                 try
                 {
-                    cancellationTokenSource.Dispose();
+                    if (cancellationTokenSource != null)
+                    {
+                        cancellationTokenSource.Dispose();
+                    }
                 }
                 catch (Exception)
                 {
@@ -151,12 +156,11 @@
                 }
             }
 
-            readonly ISendMessages sendMessages;
-            readonly Configure configure;
             readonly UnicastBus unicastBus;
-            readonly CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
 
             ServiceControlBackend backend;
+            CancellationTokenSource cancellationTokenSource;
+            string endpointName;
             Timer heartbeatTimer;
             TimeSpan ttlTimeSpan;
             TimeSpan heartbeatInterval = TimeSpan.FromSeconds(10);
