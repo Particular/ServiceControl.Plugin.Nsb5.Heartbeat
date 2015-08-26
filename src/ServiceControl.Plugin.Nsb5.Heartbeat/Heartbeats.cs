@@ -5,7 +5,6 @@
     using System.Threading;
     using System.Threading.Tasks;
     using NServiceBus;
-    using NServiceBus.Config;
     using NServiceBus.Features;
     using NServiceBus.Hosting;
     using NServiceBus.Logging;
@@ -13,115 +12,155 @@
     using NServiceBus.Unicast;
     using ServiceControl.Plugin.Heartbeat.Messages;
 
-    class Heartbeats : Feature, IWantToRunWhenConfigurationIsComplete
+    class Heartbeats : Feature
     {
-        public ISendMessages SendMessages { get; set; }
-        public Configure Configure { get; set; }
-        public UnicastBus UnicastBus { get; set; }
-
-        static ILog logger = LogManager.GetLogger(typeof(Heartbeats));
+        static ILog Logger = LogManager.GetLogger(typeof(Heartbeats));
         
         public Heartbeats()
         {
             EnableByDefault();
+
+            // we need a mechanism to start and stop to register and stop heartbeats timers.
+            // and both StartupTasks and IWantToRunWhenBusStartsAndStops aren't supported for send-only endpoints.
+            Prerequisite(context => !context.Settings.GetOrDefault<bool>("Endpoint.SendOnly"), "The Heartbeats plugin currently isn't supported for Send-Only endpoints");
+
+            RegisterStartupTask<HeartbeatStartup>();
         }
-
-        public void Run(Configure config)
-        {
-            if (!IsEnabledByDefault)
-            {
-                return;
-            }
-            
-            backend = new ServiceControlBackend(SendMessages, Configure);
-            heartbeatInterval = TimeSpan.FromSeconds(10); // Default interval
-            var interval = ConfigurationManager.AppSettings[@"Heartbeat/Interval"];
-            
-            if (!String.IsNullOrEmpty(interval))
-            {
-                heartbeatInterval = TimeSpan.Parse(interval);
-            }
-
-            ttlTimeSpan = TimeSpan.FromTicks(heartbeatInterval.Ticks * 4); // Default ttl
-            var ttl = ConfigurationManager.AppSettings[@"Heartbeat/TTL"];
-            if (!String.IsNullOrWhiteSpace(ttl))
-            {
-                if (TimeSpan.TryParse(ttl, out ttlTimeSpan))
-                {
-                    logger.InfoFormat("Heartbeat/TTL set to {0}", ttlTimeSpan);
-                }
-                else
-                {
-                    ttlTimeSpan = TimeSpan.FromTicks(heartbeatInterval.Ticks * 4);
-                    logger.Warn("Invalid Heartbeat/TTL specified in AppSettings. Reverted to default TTL (4 x Heartbeat/Interval)");   
-                }
-            }
-            
-            var hostInfo = UnicastBus.HostInformation;
-
-            NotifyEndpointStartup(hostInfo, DateTime.UtcNow);
-            StartHeartbeats(hostInfo);
-        }
-
-        void NotifyEndpointStartup(HostInformation hostInfo, DateTime startupTime)
-        {
-            try
-            {
-                backend.Send(
-                    new RegisterEndpointStartup
-                    {
-                        HostId = hostInfo.HostId,
-                        Host = hostInfo.DisplayName,
-                        Endpoint = Configure.Settings.EndpointName(),
-                        HostDisplayName = hostInfo.DisplayName,
-                        HostProperties = hostInfo.Properties,
-                        StartedAt = startupTime
-                    }, ttlTimeSpan);
-            }
-            catch (Exception ex)
-            {
-                logger.Warn(string.Format("Unable to register endpoint startup with ServiceControl. Going to reattempt registration after {0}.", registrationRetryInterval), ex);
-
-                Task.Delay(registrationRetryInterval).ContinueWith(t => NotifyEndpointStartup(hostInfo, startupTime));
-            }
-        }
-
-        void StartHeartbeats(HostInformation hostInfo)
-        {
-            logger.DebugFormat("Start sending heartbeats every {0}", heartbeatInterval);
-            heartbeatTimer = new Timer(x => ExecuteHeartbeat(hostInfo), null, TimeSpan.Zero, heartbeatInterval);
-        }
-
-        void ExecuteHeartbeat(HostInformation hostInfo)
-        {
-            var heartBeat = new EndpointHeartbeat
-            {
-                ExecutedAt = DateTime.UtcNow,
-                EndpointName = Configure.Settings.EndpointName(),
-                Host = hostInfo.DisplayName,
-                HostId = hostInfo.HostId
-            };
-
-            try
-            {
-                backend.Send(heartBeat, ttlTimeSpan);
-            }
-            catch (Exception ex)
-            {
-                logger.Warn("Unable to send heartbeat to ServiceControl:", ex);
-            }
-        }
-
-        ServiceControlBackend backend;
-        // ReSharper disable once NotAccessedField.Local
-        Timer heartbeatTimer;
-        TimeSpan heartbeatInterval;
-        TimeSpan ttlTimeSpan;
-        TimeSpan registrationRetryInterval = TimeSpan.FromMinutes(1);
 
         protected override void Setup(FeatureConfigurationContext context)
         {
         }
-        
+
+        class HeartbeatStartup : FeatureStartupTask, IDisposable
+        {
+            public HeartbeatStartup(ISendMessages sendMessages, Configure configure, UnicastBus unicastBus)
+            {
+                this.sendMessages = sendMessages;
+                this.configure = configure;
+                this.unicastBus = unicastBus;
+            }
+
+            protected override void OnStart()
+            {
+                backend = new ServiceControlBackend(sendMessages, configure);
+
+                var interval = ConfigurationManager.AppSettings[@"Heartbeat/Interval"];
+                if (!String.IsNullOrEmpty(interval))
+                {
+                    heartbeatInterval = TimeSpan.Parse(interval);
+                }
+
+                ttlTimeSpan = TimeSpan.FromTicks(heartbeatInterval.Ticks * 4); // Default ttl
+                var ttl = ConfigurationManager.AppSettings[@"Heartbeat/TTL"];
+                if (!String.IsNullOrWhiteSpace(ttl))
+                {
+                    if (TimeSpan.TryParse(ttl, out ttlTimeSpan))
+                    {
+                        Logger.InfoFormat("Heartbeat/TTL set to {0}", ttlTimeSpan);
+                    }
+                    else
+                    {
+                        ttlTimeSpan = TimeSpan.FromTicks(heartbeatInterval.Ticks * 4);
+                        Logger.Warn("Invalid Heartbeat/TTL specified in AppSettings. Reverted to default TTL (4 x Heartbeat/Interval)");
+                    }
+                }
+
+                var hostInfo = unicastBus.HostInformation;
+
+                NotifyEndpointStartup(hostInfo, DateTime.UtcNow);
+                StartHeartbeats(hostInfo);
+            }
+
+            protected override void OnStop()
+            {
+                if (heartbeatTimer != null)
+                {
+                    heartbeatTimer.Dispose();
+                }
+
+                cancellationTokenSource.Cancel();
+
+                base.OnStop();
+            }
+
+            void NotifyEndpointStartup(HostInformation hostInfo, DateTime startupTime)
+            {
+                // don't block here since StartupTasks are executed synchronously.
+                Task.Run(() => SendEndpointStartupMessage(hostInfo, startupTime, cancellationTokenSource.Token));
+            }
+
+            void StartHeartbeats(HostInformation hostInfo)
+            {
+                Logger.DebugFormat("Start sending heartbeats every {0}", heartbeatInterval);
+                heartbeatTimer = new Timer(x => SendHeartbeatMessage(hostInfo), null, TimeSpan.Zero, heartbeatInterval);
+            }
+
+            void SendEndpointStartupMessage(HostInformation hostInfo, DateTime startupTime, CancellationToken cancellationToken)
+            {
+                try
+                {
+                    backend.Send(
+                        new RegisterEndpointStartup
+                        {
+                            HostId = hostInfo.HostId,
+                            Host = hostInfo.DisplayName,
+                            Endpoint = configure.Settings.EndpointName(),
+                            HostDisplayName = hostInfo.DisplayName,
+                            HostProperties = hostInfo.Properties,
+                            StartedAt = startupTime
+                        }, ttlTimeSpan);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn(string.Format("Unable to register endpoint startup with ServiceControl. Going to reattempt registration after {0}.", registrationRetryInterval), ex);
+
+                    Task.Delay(registrationRetryInterval, cancellationToken)
+                        .ContinueWith(t => SendEndpointStartupMessage(hostInfo, startupTime, cancellationToken), cancellationToken);
+                }
+            }
+
+            void SendHeartbeatMessage(HostInformation hostInfo)
+            {
+                var heartBeat = new EndpointHeartbeat
+                {
+                    ExecutedAt = DateTime.UtcNow,
+                    EndpointName = configure.Settings.EndpointName(),
+                    Host = hostInfo.DisplayName,
+                    HostId = hostInfo.HostId
+                };
+
+                try
+                {
+                    backend.Send(heartBeat, ttlTimeSpan);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn("Unable to send heartbeat to ServiceControl:", ex);
+                }
+            }
+
+            public void Dispose()
+            {
+                try
+                {
+                    cancellationTokenSource.Dispose();
+                }
+                catch (Exception)
+                {
+                    // ignored
+                }
+            }
+
+            readonly ISendMessages sendMessages;
+            readonly Configure configure;
+            readonly UnicastBus unicastBus;
+            readonly CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+
+            ServiceControlBackend backend;
+            Timer heartbeatTimer;
+            TimeSpan ttlTimeSpan;
+            TimeSpan heartbeatInterval = TimeSpan.FromSeconds(10);
+            TimeSpan registrationRetryInterval = TimeSpan.FromMinutes(1);
+        }
     }
 }
