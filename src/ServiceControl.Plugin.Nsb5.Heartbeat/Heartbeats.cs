@@ -36,6 +36,7 @@
             }
             
             backend = new ServiceControlBackend(SendMessages, Configure, CriticalError);
+            backend.VerifyIfServiceControlQueueExists();
             heartbeatInterval = TimeSpan.FromSeconds(10); // Default interval
             var interval = ConfigurationManager.AppSettings[@"Heartbeat/Interval"];
             
