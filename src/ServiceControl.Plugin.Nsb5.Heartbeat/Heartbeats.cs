@@ -143,16 +143,9 @@
 
             public void Dispose()
             {
-                try
+                if (cancellationTokenSource != null)
                 {
-                    if (cancellationTokenSource != null)
-                    {
-                        cancellationTokenSource.Dispose();
-                    }
-                }
-                catch (Exception)
-                {
-                    // ignored
+                    cancellationTokenSource.Dispose();
                 }
             }
 
