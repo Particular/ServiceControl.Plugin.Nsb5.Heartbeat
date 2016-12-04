@@ -37,6 +37,12 @@
     <DocumentationFile>bin\Release\ServiceControl.Plugin.Nsb5.Heartbeat.xml</DocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
+  <PropertyGroup>
+    <SignAssembly>true</SignAssembly>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AssemblyOriginatorKeyFile>..\NServiceBus.snk</AssemblyOriginatorKeyFile>
+  </PropertyGroup>
   <ItemGroup>
     <Reference Include="NServiceBus.Core, Version=5.0.0.0, Culture=neutral, PublicKeyToken=9fc386479f8a226c, processorArchitecture=MSIL">
       <SpecificVersion>False</SpecificVersion>
@@ -48,6 +54,7 @@
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="InternalsVisibleTo.cs" />
     <Compile Include="Messages\EndpointHeartbeat.cs" />
     <Compile Include="EnrichPreV44MessagesWithHostDetailsMutator.cs" />
     <Compile Include="Heartbeats.cs">
