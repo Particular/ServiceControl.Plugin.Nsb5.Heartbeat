@@ -36,6 +36,10 @@
   </PropertyGroup>
   <PropertyGroup>
     <StartupObject>ServiceControl.Plugin.Nsb5.Heartbeat.Sample.Program</StartupObject>
+    <SignAssembly>true</SignAssembly>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AssemblyOriginatorKeyFile>..\NServiceBus.snk</AssemblyOriginatorKeyFile>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="NServiceBus.Core, Version=5.0.0.0, Culture=neutral, PublicKeyToken=9fc386479f8a226c, processorArchitecture=MSIL">
