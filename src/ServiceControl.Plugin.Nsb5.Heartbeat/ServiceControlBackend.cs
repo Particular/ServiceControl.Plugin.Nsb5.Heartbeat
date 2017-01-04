@@ -3,6 +3,7 @@
     using System;
     using System.Configuration;
     using System.IO;
+    using System.Linq;
     using System.Text;
     using NServiceBus;
     using NServiceBus.Config;
@@ -20,7 +21,7 @@
             this.messageSender = messageSender;
             serializer = new JsonMessageSerializer(new SimpleMessageMapper());
 
-            serviceControlBackendAddress = GetServiceControlAddress();
+            serviceControlBackendAddresses = GetServiceControlAddress();
         }
 
         public void Send(object messageToSend, TimeSpan timeToBeReceived)
@@ -47,8 +48,10 @@
             // end hack
             message.Headers[Headers.EnclosedMessageTypes] = messageToSend.GetType().FullName;
             message.Headers[Headers.ContentType] = ContentTypes.Json; //Needed for ActiveMQ transport
-
-            messageSender.Send(message, new SendOptions(serviceControlBackendAddress) { ReplyToAddress = configure.LocalAddress });
+            foreach (var serviceControlBackendAddress in serviceControlBackendAddresses)
+            {
+                messageSender.Send(message, new SendOptions(serviceControlBackendAddress) { ReplyToAddress = configure.LocalAddress });
+            }
         }
 
         public void Send(object messageToSend)
@@ -56,18 +59,18 @@
             Send(messageToSend, TimeSpan.MaxValue);
         }
 
-        Address GetServiceControlAddress()
+        Address[] GetServiceControlAddress()
         {
-            var queueName = ConfigurationManager.AppSettings[@"ServiceControl/Queue"];
-            if (!String.IsNullOrEmpty(queueName))
+            var queueNames = ConfigurationManager.AppSettings[@"ServiceControl/Queue"];
+            if (!String.IsNullOrWhiteSpace(queueNames))
             {
-                return Address.Parse(queueName);
+                return queueNames.Split(';').Select(Address.Parse).ToArray();
             }
 
             Address errorAddress;
             if (TryGetErrorQueueAddress(out errorAddress))
             { 
-                return new Address("Particular.ServiceControl", errorAddress.Machine);
+                return new[] {new Address("Particular.ServiceControl", errorAddress.Machine)};
             }
 
             if (VersionChecker.CoreVersionIsAtLeast(4, 1))
@@ -76,7 +79,7 @@
                 Address address;
                 if (TryGetAuditAddress(out address))
                 {
-                    return new Address("Particular.ServiceControl", address.Machine);
+                    return new[] { new Address("Particular.ServiceControl", address.Machine)};
                 }
             }
 
@@ -110,6 +113,6 @@
 
         JsonMessageSerializer serializer;
         ISendMessages messageSender;
-        Address serviceControlBackendAddress;
+        Address[] serviceControlBackendAddresses;
     }
 }

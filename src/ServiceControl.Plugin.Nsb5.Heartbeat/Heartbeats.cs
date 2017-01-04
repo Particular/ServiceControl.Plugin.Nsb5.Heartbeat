@@ -41,9 +41,16 @@
                 endpointName = configure.Settings.EndpointName();
 
                 var interval = ConfigurationManager.AppSettings[@"Heartbeat/Interval"];
-                if (!String.IsNullOrEmpty(interval))
+                if (!String.IsNullOrWhiteSpace(interval))
                 {
-                    heartbeatInterval = TimeSpan.Parse(interval);
+                    if (TimeSpan.TryParse(interval, out heartbeatInterval))
+                    {
+                        Logger.InfoFormat("Heartbeat/Interval set to {0}",heartbeatInterval);
+                    }
+                    else
+                    {
+                        Logger.Warn("Invalid Heartbeat/Interval specified in AppSettings. Reverted to default Interval (10 seconds)");
+                    }
                 }
 
                 ttlTimeSpan = TimeSpan.FromTicks(heartbeatInterval.Ticks * 4); // Default ttl
