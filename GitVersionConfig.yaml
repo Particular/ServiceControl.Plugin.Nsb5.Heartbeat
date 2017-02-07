@@ -1,1 +1,6 @@
-assemblyVersioningScheme: Major
+assembly-versioning-scheme: Major
+branches:
+  develop:
+    tag: alpha
+  releases?[/-]:
+    tag: rc
