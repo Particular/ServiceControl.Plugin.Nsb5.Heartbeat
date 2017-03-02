@@ -49,7 +49,11 @@
         {
             if (heartbeatTimer != null)
             {
-                heartbeatTimer.Dispose();
+                using (var manualResetEvent = new ManualResetEvent(false))
+                {
+                    heartbeatTimer.Dispose(manualResetEvent);
+                    manualResetEvent.WaitOne();
+                }
             }
 
             if (cancellationTokenSource != null)
