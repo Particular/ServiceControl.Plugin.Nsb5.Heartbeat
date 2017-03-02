@@ -121,6 +121,10 @@
             {
                 backend.Send(heartBeat, ttlTimeSpan);
             }
+            catch (ObjectDisposedException ex)
+            {
+                Logger.Debug("Ignoring object disposed. Likely means we are shutting down:", ex);
+            }
             catch (Exception ex)
             {
                 Logger.Warn("Unable to send heartbeat to ServiceControl:", ex);
