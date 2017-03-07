@@ -14,6 +14,7 @@
 
     class Heartbeats : IWantToRunWhenConfigurationIsComplete, IDisposable
     {
+        private const int MillisecondsToWaitForShutdown = 500;
         static ILog Logger = LogManager.GetLogger(typeof(Heartbeats));
 
         public Heartbeats(ISendMessages sendMessages, Configure configure, UnicastBus unicastBus)
@@ -52,7 +53,7 @@
                 using (var manualResetEvent = new ManualResetEvent(false))
                 {
                     heartbeatTimer.Dispose(manualResetEvent);
-                    manualResetEvent.WaitOne();
+                    manualResetEvent.WaitOne(MillisecondsToWaitForShutdown);
                 }
             }
 
