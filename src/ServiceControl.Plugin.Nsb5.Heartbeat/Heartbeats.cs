@@ -14,6 +14,7 @@
 
     class Heartbeats : IWantToRunWhenConfigurationIsComplete, IDisposable
     {
+        private const int MillisecondsToWaitForShutdown = 500;
         static ILog Logger = LogManager.GetLogger(typeof(Heartbeats));
 
         public Heartbeats(ISendMessages sendMessages, Configure configure, UnicastBus unicastBus)
@@ -49,7 +50,11 @@
         {
             if (heartbeatTimer != null)
             {
-                heartbeatTimer.Dispose();
+                using (var manualResetEvent = new ManualResetEvent(false))
+                {
+                    heartbeatTimer.Dispose(manualResetEvent);
+                    manualResetEvent.WaitOne(MillisecondsToWaitForShutdown);
+                }
             }
 
             if (cancellationTokenSource != null)
@@ -116,6 +121,10 @@
             try
             {
                 backend.Send(heartBeat, ttlTimeSpan);
+            }
+            catch (ObjectDisposedException ex)
+            {
+                Logger.Debug("Ignoring object disposed. Likely means we are shutting down:", ex);
             }
             catch (Exception ex)
             {
