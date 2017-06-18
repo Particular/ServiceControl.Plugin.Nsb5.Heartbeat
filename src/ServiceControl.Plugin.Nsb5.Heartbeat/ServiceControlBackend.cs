@@ -58,7 +58,7 @@
 
         Address GetServiceControlAddress()
         {
-            var queueName = ConfigurationManager.AppSettings[@"ServiceControl/Queue"];
+            var queueName = ConfigurationManager.AppSettings["ServiceControl/Queue"];
             if (!String.IsNullOrEmpty(queueName))
             {
                 return Address.Parse(queueName);

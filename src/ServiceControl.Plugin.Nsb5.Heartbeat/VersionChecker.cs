@@ -3,7 +3,7 @@
     using NServiceBus;
     using System;
     using System.Diagnostics;
-        
+
     class VersionChecker
     {
         static VersionChecker()

@@ -30,7 +30,7 @@
             {
                 EndpointSetup<DefaultServer>();
                 // couldn't find a better way to configure the plugin settings. This will probably fail other tests in this project.
-                ConfigurationManager.AppSettings[@"ServiceControl/Queue"] = "invalidSCQueue";
+                ConfigurationManager.AppSettings["ServiceControl/Queue"] = "invalidSCQueue";
             }
         }
 
