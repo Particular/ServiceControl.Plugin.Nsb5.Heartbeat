@@ -14,6 +14,9 @@
     <UpdateAssemblyInfo>true</UpdateAssemblyInfo>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="..\..\packaging\nuget\servicecontrol.plugin.Nsb5.heartbeat.nuspec" Link="servicecontrol.plugin.Nsb5.heartbeat.nuspec" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="NServiceBus" Version="5.0.0" />
     <PackageReference Include="GitVersionTask" Version="4.0.0-beta0012" />
     <PackageReference Include="NuGetPackager" Version="0.6.3" />
