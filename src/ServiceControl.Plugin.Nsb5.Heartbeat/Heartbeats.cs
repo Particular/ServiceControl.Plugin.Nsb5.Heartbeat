@@ -24,14 +24,14 @@
             backend = new ServiceControlBackend(sendMessages, configure);
             endpointName = configure.Settings.EndpointName();
 
-            var interval = ConfigurationManager.AppSettings[@"Heartbeat/Interval"];
+            var interval = ConfigurationManager.AppSettings["Heartbeat/Interval"];
             if (!String.IsNullOrEmpty(interval))
             {
                 heartbeatInterval = TimeSpan.Parse(interval);
             }
 
             ttlTimeSpan = TimeSpan.FromTicks(heartbeatInterval.Ticks*4); // Default ttl
-            var ttl = ConfigurationManager.AppSettings[@"Heartbeat/TTL"];
+            var ttl = ConfigurationManager.AppSettings["Heartbeat/TTL"];
             if (!String.IsNullOrWhiteSpace(ttl))
             {
                 if (TimeSpan.TryParse(ttl, out ttlTimeSpan))
