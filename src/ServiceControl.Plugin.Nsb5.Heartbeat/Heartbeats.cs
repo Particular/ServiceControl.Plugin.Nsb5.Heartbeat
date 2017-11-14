@@ -44,6 +44,8 @@
                     Logger.Warn("Invalid Heartbeat/TTL specified in AppSettings. Reverted to default TTL (4 x Heartbeat/Interval)");
                 }
             }
+
+            Logger.Warn("The ServiceControl.Plugin.Nsb5.Heartbeat package has been replaced by the NServiceBus.Heartbeat package. See the upgrade guide for more details.");
         }
 
         public void Dispose()
